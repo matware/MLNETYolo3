@@ -39,7 +39,6 @@ namespace YoloV3Detector
                     ,inputColumnName: configuration.ModelInput
                     ,scaleImage:1f/255f
                     ,interleavePixelColors:false))
-            
             .Append(mlContext.Transforms.ApplyOnnxModel(modelFile: modelLocation,
                 outputColumnNames: new[] { configuration.ModelOutput },
                 inputColumnNames: new[] { configuration.ModelInput }, fallbackToCpu: true)

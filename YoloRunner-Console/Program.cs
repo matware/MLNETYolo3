@@ -20,14 +20,15 @@ namespace YoloV3Detector
             var testDataPath = @"../../../TestData";
             var modelPath = @"../../../Models";
             string tests = GetAbsolutePath(testDataPath);
-            var modelFilePath = Path.Combine(modelPath, "yolov3.onnx");
+            var modelFilePath = Path.Combine(modelPath, "yolov3-tiny.onnx");
             var imagesFolder = Path.Combine(tests, "images");
             var outputFolder = Path.Combine(tests, "images", "output");
 
             MLContext mlContext = new MLContext();
             try
             {
-                IYoloConfiguration cfg = new Yolov3x13x13Config();
+                //IYoloConfiguration cfg = new Yolov3x13x13Config();
+                IYoloConfiguration cfg = new YoloV3Tinyx13Config();
                 IEnumerable<ImageNetData> images = ImageNetData.ReadFromFile(imagesFolder);
                 IDataView imageDataView = mlContext.Data.LoadFromEnumerable(images);
                 var modelScorer = new OnnxModelScorer(imagesFolder, modelFilePath, mlContext,cfg);
