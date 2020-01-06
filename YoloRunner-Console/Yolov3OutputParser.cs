@@ -7,22 +7,23 @@ namespace YoloV3Detector
     public class Yolov3OutputParser
     {
         // Number of cells per box, which in yolov3 is 3, 
-        public const int BoxesPerCell = 3;
-        public const int BoxInfoFeatureCount = 5;
-        private readonly int classCount;
+        public const uint BoxesPerCell = 3;
+        public const uint BoxInfoFeatureCount = 5;
+        private readonly uint classCount;
         private readonly IYoloConfiguration configuration;
 
-        public float cellWidth => configuration.ImageWidth/ configuration.RowCount;
-        public float cellHeight => configuration.ImageHeight / configuration.ColumnCount;
+        public float cellWidth => configuration.ImageWidth / selectedOutput.Dimension;
+        public float cellHeight => configuration.ImageHeight / selectedOutput.Dimension;
 
-        private int channelStride => configuration.RowCount * configuration.ColumnCount;
-       
+        private uint channelStride => selectedOutput.Dimension * selectedOutput.Dimension;
+        private YoloOutput selectedOutput;
         class CellDimensions : DimensionsBase { }
 
-        public Yolov3OutputParser(IYoloConfiguration configuration)
+        public Yolov3OutputParser(IYoloConfiguration configuration, string selectedOutput)
         {
             this.configuration = configuration;
-            classCount = configuration.Labels.Length;
+            classCount = (uint)configuration.Labels.Length;
+            this.selectedOutput = (from n in configuration.Outputs where n.Name == selectedOutput select n).First();
         }
 
         private static Color[] classColors = new Color[]
@@ -77,16 +78,16 @@ namespace YoloV3Detector
             return exp.Select(v => (float)(v / sumExp)).ToArray();
         }
 
-        private int GetOffset(int x, int y, int channel)
+        private uint GetOffset(uint x, uint y, uint channel)
         {
             // YOLOv3 outputs a tensor that has a shape of 255x13x13, which 
             // WinML flattens into a 1D array.  To access a specific channel 
             // for a given (x,y) cell position, we need to calculate an offset
             // into the array
-            return (channel * this.channelStride) + (y * configuration.ColumnCount) + x;
+            return (channel * this.channelStride) + (y * selectedOutput.Dimension) + x;
         }
 
-        private BoundingBoxDimensions ExtractBoundingBoxDimensions(float[] modelOutput, int x, int y, int channel)
+        private BoundingBoxDimensions ExtractBoundingBoxDimensions(float[] modelOutput, uint x, uint y, uint channel)
         {
             var result =
             new BoundingBoxDimensions
@@ -99,7 +100,7 @@ namespace YoloV3Detector
             return result;
         }
 
-        private float GetConfidence(float[] modelOutput, int x, int y, int channel)
+        private float GetConfidence(float[] modelOutput, uint x, uint y, uint channel)
         {
             var offset = GetOffset(x, y, channel + 4);
             var rawConfidence = modelOutput[offset];
@@ -107,23 +108,23 @@ namespace YoloV3Detector
             return confidence;
         }
 
-        private CellDimensions MapBoundingBoxToCell(int x, int y, int box, BoundingBoxDimensions boxDimensions)
+        private CellDimensions MapBoundingBoxToCell(uint x, uint y, uint box, BoundingBoxDimensions boxDimensions)
         {
             var result = new CellDimensions
             {
                 X = ((float)x + Sigmoid(boxDimensions.X)) * cellWidth,
                 Y = ((float)y + Sigmoid(boxDimensions.Y)) * cellHeight,
-                Width = (float)Math.Exp(boxDimensions.Width) * configuration.Anchors[box * 2],
-                Height = (float)Math.Exp(boxDimensions.Height) * configuration.Anchors[box * 2 + 1],
+                Width = (float)Math.Exp(boxDimensions.Width) * selectedOutput.Anchors[box * 2],
+                Height = (float)Math.Exp(boxDimensions.Height) * selectedOutput.Anchors[box * 2 + 1],
             };
             return result;
         }
 
-        public float[] ExtractClasses(float[] modelOutput, int x, int y, int channel)
+        public float[] ExtractClasses(float[] modelOutput, uint x, uint y, uint channel)
         {
             float[] predictedClasses = new float[classCount];
-            int predictedClassOffset = channel + BoxInfoFeatureCount;
-            for (int predictedClass = 0; predictedClass < classCount; predictedClass++)
+            uint predictedClassOffset = channel + BoxInfoFeatureCount;
+            for (uint predictedClass = 0; predictedClass < classCount; predictedClass++)
             {
                 predictedClasses[predictedClass] = modelOutput[GetOffset(x, y, predictedClass + predictedClassOffset)];
             }
@@ -162,24 +163,24 @@ namespace YoloV3Detector
 
         public IList<YoloBoundingBox> ParseOutputs(float[] yoloModelOutputs, float threshold = .3F)
         {
-            int rowStride = BoxesPerCell * configuration.ColumnCount * (5 + classCount);
-            int columnStride = BoxesPerCell * (classCount + BoxInfoFeatureCount);
-                       
+            uint rowStride = BoxesPerCell * selectedOutput.Dimension * (5 + classCount);
+            uint columnStride = BoxesPerCell * (classCount + BoxInfoFeatureCount);
+
             var boxes = new List<YoloBoundingBox>();
 
 
-            for (int row = 0; row < configuration.RowCount; row++)
+            for (uint row = 0; row < selectedOutput.Dimension; row++)
             {
-                for (int column = 0; column < configuration.ColumnCount; column++)
+                for (uint column = 0; column < selectedOutput.Dimension; column++)
                 {
-                    for (int box = 0; box < BoxesPerCell; box++)
+                    for (uint box = 0; box < BoxesPerCell; box++)
                     {
-                        var channel = (box * (classCount + BoxInfoFeatureCount));
-                        for (int i = 0; i < BoxInfoFeatureCount; i++)
+                        uint channel = (box * (classCount + BoxInfoFeatureCount));
+                        for (uint i = 0; i < BoxInfoFeatureCount; i++)
                         {
-                            var index = GetOffset(row,column,channel+i);
+                            var index = GetOffset(row, column, channel + i);
                         }
-                        
+
                         float confidence = GetConfidence(yoloModelOutputs, row, column, channel);
                         if (confidence < threshold)
                             continue;
@@ -188,7 +189,7 @@ namespace YoloV3Detector
                         CellDimensions mappedBoundingBox = MapBoundingBoxToCell(row, column, box, boundingBoxDimensions);
 
                         float[] predictedClasses = ExtractClasses(yoloModelOutputs, row, column, channel);
-                        
+
                         var (topResultIndex, topResultScore) = GetTopResult(predictedClasses);
                         var topScore = topResultScore * confidence;
                         if (topScore < threshold)
@@ -204,7 +205,7 @@ namespace YoloV3Detector
                             },
                             Confidence = topScore,
                             Label = configuration.Labels[topResultIndex],
-                            BoxColor = classColors[topResultIndex% classColors.Length]
+                            BoxColor = classColors[topResultIndex % classColors.Length]
                         });
                     }
                 }

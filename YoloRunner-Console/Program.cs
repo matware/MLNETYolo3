@@ -27,15 +27,17 @@ namespace YoloV3Detector
             MLContext mlContext = new MLContext();
             try
             {
-                //IYoloConfiguration cfg = new Yolov3x13x13Config();
-                IYoloConfiguration cfg = new YoloV3Tinyx13Config();
+                IYoloConfiguration cfg = new YoloV3TinyConfig();
                 IEnumerable<ImageNetData> images = ImageNetData.ReadFromFile(imagesFolder);
                 IDataView imageDataView = mlContext.Data.LoadFromEnumerable(images);
-                var modelScorer = new OnnxModelScorer(imagesFolder, modelFilePath, mlContext,cfg);
+                var modelScorer = new OnnxModelScorer(imagesFolder, modelFilePath, mlContext, cfg);
+                var selectedOutput = cfg.Outputs[0].Name;
+                Console.WriteLine($"Using ONNX output {selectedOutput}");
 
-                // Use model to score data
-                IEnumerable<float[]> probabilities = modelScorer.Score(imageDataView);
-                Yolov3OutputParser parser = new Yolov3OutputParser(cfg);
+                // Use model to score data, pick the first output
+                IEnumerable<float[]> probabilities = modelScorer.Score(imageDataView, selectedOutput);
+                Yolov3OutputParser parser = new Yolov3OutputParser(cfg, selectedOutput);
+
                 var boundingBoxes =
                     probabilities
                     .Select(probability => parser.ParseOutputs(probability))
@@ -45,10 +47,10 @@ namespace YoloV3Detector
                 {
                     string imageFileName = images.ElementAt(i).Label;
                     IList<YoloBoundingBox> detectedObjects = boundingBoxes.ElementAt(i);
-                    DrawBoundingBox(imagesFolder, outputFolder, imageFileName, detectedObjects,cfg);
+                    DrawBoundingBox(imagesFolder, outputFolder, imageFileName, detectedObjects, cfg);
                     LogDetectedObjects(imageFileName, detectedObjects);
                 }
-                
+
             }
             catch (Exception ex)
 
@@ -99,7 +101,7 @@ namespace YoloV3Detector
                     thumbnailGraphic.DrawString(text, drawFont, fontBrush, atPoint);
 
                     // Draw bounding box on image
-                    thumbnailGraphic.DrawRectangle(pen, x-width/2, y-height/2, width, height);
+                    thumbnailGraphic.DrawRectangle(pen, x - width / 2, y - height / 2, width, height);
                     if (!Directory.Exists(outputImageLocation))
                     {
                         Directory.CreateDirectory(outputImageLocation);

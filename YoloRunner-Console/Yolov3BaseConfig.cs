@@ -1,8 +1,9 @@
-﻿namespace YoloV3Detector
+﻿using System.Collections.Generic;
+
+namespace YoloV3Detector
 {
     public abstract class Yolov3BaseConfig : IYoloConfiguration
     {
-        public abstract float[] Anchors { get; }
         public string[] Labels => new string[] {
         "person",
         "bicycle",
@@ -88,9 +89,7 @@
 
         public uint ImageWidth => 416;
         public uint ImageHeight => 416;
-        public abstract int RowCount { get; }
-        public abstract int ColumnCount { get; }
-        public abstract string ModelOutput { get; }
         public abstract string ModelInput { get; }
+        public abstract IList<YoloOutput> Outputs { get; }
     }
 }
